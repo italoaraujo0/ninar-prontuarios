@@ -8,6 +8,8 @@ const supabase = createClient(
 
 export default function App() {
   const [chamados, setChamados] = useState([]);
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
   const [form, setForm] = useState({ nome: "", cpf: "", solicitante: "", profissional: "" });
 
   const carregarDados = async () => {
@@ -17,55 +19,68 @@ export default function App() {
 
   useEffect(() => { carregarDados(); }, []);
 
+  const agora = () => new Date().toLocaleString('pt-BR');
+
   const criarChamado = async () => {
-    if (!form.nome || !form.cpf) return alert("Preencha Nome e CNS/CPF!");
-    await supabase.from("chamados").insert([{ ...form, status: "Pendente" }]);
+    if (!form.nome || !form.cpf) return alert("Campos obrigatórios!");
+    const logInicial = [`${agora()} - Criado por ${form.solicitante}`];
+    
+    await supabase.from("chamados").insert([{ ...form, status: "Pendente", logs: logInicial }]);
     setForm({ nome: "", cpf: "", solicitante: "", profissional: "" });
     carregarDados();
   };
 
-  const mudarStatus = async (id, novoStatus) => {
-    await supabase.from("chamados").update({ status: novoStatus }).eq("id", id);
+  const atualizarStatus = async (id, novoStatus, logsAntigos) => {
+    const novoLog = `${agora()} - Status alterado para: ${novoStatus}`;
+    const listaLogs = logsAntigos ? [...logsAntigos, novoLog] : [novoLog];
+
+    await supabase.from("chamados").update({ 
+      status: novoStatus, 
+      logs: listaLogs 
+    }).eq("id", id);
+    
     carregarDados();
   };
 
-  const deletarItem = async (id) => {
-    if (window.confirm("Excluir registro?")) {
-      await supabase.from("chamados").delete().eq("id", id);
-      carregarDados();
-    }
-  };
+  // FILTRO
+  const chamadosFiltrados = chamados.filter(c => {
+    if (!dataInicio && !dataFim) return true;
+    const dataC = new Date(c.created_at);
+    if (dataInicio && dataC < new Date(dataInicio)) return false;
+    if (dataFim && dataC > new Date(dataFim + "T23:59:59")) return false;
+    return true;
+  });
 
   return (
-    <div style={{ backgroundColor: '#f0f2f5', minHeight: '100vh', padding: '15px', fontFamily: 'sans-serif' }}>
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <h2 style={{ textAlign: 'center', color: '#1a1a1a' }}>Ninar Prontuários</h2>
+    <div style={{ background: "#f0f2f5", minHeight: "100vh", padding: "15px", fontFamily: "sans-serif" }}>
+      <div style={{ maxWidth: "500px", margin: "0 auto" }}>
+        <h2 style={{ textAlign: "center" }}>📋 Ninar Prontuários</h2>
 
-        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <input style={s.input} placeholder="Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
-            <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
-            <input style={s.input} placeholder="Solicitante" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
-            <input style={s.input} placeholder="Destino Profissional" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
-            <button style={s.btnMain} onClick={criarChamado}>CADASTRAR</button>
-          </div>
+        {/* FORMULÁRIO */}
+        <div style={s.card}>
+          <input style={s.input} placeholder="Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
+          <input style={s.input} placeholder="CNS / CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
+          <input style={s.input} placeholder="Solicitante" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
+          <input style={s.input} placeholder="Profissional" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
+          <button style={s.btnBlue} onClick={criarChamado}>CADASTRAR</button>
         </div>
 
-        {chamados.map(c => (
-          <div key={c.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', borderLeft: `6px solid ${c.status === 'Pendente' ? '#ff4d4f' : '#2ecc71'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <strong>{c.nome}</strong>
-              <button onClick={() => deletarItem(c.id)} style={{ border: 'none', background: 'none', color: '#ccc' }}>✕</button>
+        {/* LISTA COM RASTREIO */}
+        {chamadosFiltrados.map(c => (
+          <div key={c.id} style={{ ...s.card, borderLeft: `6px solid ${c.status === 'Pendente' ? '#ff4d4f' : '#2ecc71'}` }}>
+            <strong>{c.nome}</strong> <br/>
+            <small>CNS: {c.cpf} | Destino: {c.profissional}</small>
+            
+            <div style={s.logBox}>
+              {c.logs && c.logs.map((l, i) => <div key={i} style={{fontSize: '10px', borderBottom: '1px solid #eee'}}>{l}</div>)}
             </div>
-            <p style={{ fontSize: '0.9rem', margin: '8px 0', color: '#555' }}>
-              <b>CNS:</b> {c.cpf} | <b>Destino:</b> {c.profissional}
-            </p>
-            <p style={{ fontSize: '0.8rem', color: '#888' }}>Status: {c.status}</p>
-            <div style={{ marginTop: '10px' }}>
-              {c.status === "Pendente" ? (
-                <button style={s.btnDeliver} onClick={() => mudarStatus(c.id, "Atendido")}>📦 ENTREGAR</button>
-              ) : (
-                <button style={s.btnReturn} onClick={() => mudarStatus(c.id, "Devolvido")}>✔ DEVOLVIDO</button>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+              {c.status === "Pendente" && (
+                <button style={s.btnAction} onClick={() => atualizarStatus(c.id, "Atendido", c.logs)}>📦 ENTREGAR</button>
+              )}
+              {c.status === "Atendido" && (
+                <button style={{...s.btnAction, background: '#2ecc71'}} onClick={() => atualizarStatus(c.id, "Devolvido", c.logs)}>✔ DEVOLVER</button>
               )}
             </div>
           </div>
@@ -76,8 +91,9 @@ export default function App() {
 }
 
 const s = {
-  input: { padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px' },
-  btnMain: { padding: '15px', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px' },
-  btnDeliver: { width: '100%', padding: '12px', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnReturn: { width: '100%', padding: '12px', backgroundColor: '#2ecc71', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
+  card: { background: "#fff", padding: "15px", borderRadius: "12px", marginBottom: "15px", boxShadow: "0 2px 5px rgba(0,0,0,0.1)" },
+  input: { width: "100%", padding: "10px", marginBottom: "8px", borderRadius: "6px", border: "1px solid #ddd", boxSizing: "border-box" },
+  btnBlue: { width: "100%", padding: "12px", background: "#007bff", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold" },
+  btnAction: { flex: 1, padding: "10px", background: "#f39c12", color: "#fff", border: "none", borderRadius: "6px", fontWeight: "bold" },
+  logBox: { background: "#f8f9fa", padding: "8px", marginTop: "10px", borderRadius: "5px", maxHeight: "60px", overflowY: "auto" }
 };
