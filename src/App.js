@@ -1,126 +1,140 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-// Estilos mantendo o padrão visual do seu print
-const styles = {
-  container: { padding: '20px', maxWidth: '450px', margin: 'auto', fontFamily: 'sans-serif', backgroundColor: '#f4f7f6', minHeight: '100vh' },
-  card: { backgroundColor: '#fff', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginBottom: '20px' },
-  input: { width: '100%', padding: '12px', marginBottom: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', boxSizing: 'border-box' },
-  btnRegistrar: { width: '100%', padding: '15px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', marginBottom: '10px' },
-  btnProtocolo: { width: '100%', padding: '15px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' },
-  itemLista: { borderLeft: '5px solid #007bff', padding: '15px', backgroundColor: '#fff', borderRadius: '8px', position: 'relative', marginTop: '15px' }
-};
+const supabase = createClient(
+  "https://vyteblkicfeqodyfiiqo.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5dGVibGtpY2ZlcW9keWZpaXFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTE5NzAsImV4cCI6MjA5MTY4Nzk3MH0.slj913xmbI0HcBZDQe2davRsLdlcN_oguasP8ZCaUYQ"
+);
 
-export default function NinarApp() {
-  const [dados, setDados] = useState({ paciente: '', documento: '', solicitante: '', destino: '' });
-  const [lista, setLista] = useState([]);
-  const [registroAtivo, setRegistroAtivo] = useState(null);
+export default function App() {
+  const [chamados, setChamados] = useState([]);
+  const [busca, setBusca] = useState("");
+  const [form, setForm] = useState({ nome: "", cpf: "", solicitante: "", profissional: "", tipo: "Agenda" });
 
-  // Função para registrar (o que alimenta a lista e gera o protocolo)
-  const registrarMovimentacao = () => {
-    if (!dados.paciente || !dados.solicitante) {
-      alert("Por favor, preencha o nome do paciente e do solicitante.");
-      return;
+  const carregarDados = async () => {
+    const { data } = await supabase.from("chamados").select("*").order("created_at", { ascending: false });
+    setChamados(data || []);
+  };
+
+  useEffect(() => { 
+    carregarDados();
+    const interval = setInterval(carregarDados, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const agora = () => new Date().toLocaleString('pt-BR');
+
+  const salvarChamado = async () => {
+    if (!form.nome || !form.cpf || !form.solicitante) return alert("Preencha Nome, CNS e Quem está pedindo!");
+    const logInicial = [`${agora()} - [${form.tipo}] Prontuário separado no Arquivo`];
+    await supabase.from("chamados").insert([{ ...form, status: "No Arquivo (Separado)", logs: logInicial }]);
+    setForm({ nome: "", cpf: "", solicitante: "", profissional: "", tipo: "Agenda" });
+    carregarDados();
+  };
+
+  const atualizarStatus = async (id, novoStatus, logsAntigos) => {
+    const novoLog = `${agora()} - ${novoStatus}`;
+    const listaLogs = Array.isArray(logsAntigos) ? [...logsAntigos, novoLog] : [novoLog];
+    await supabase.from("chamados").update({ status: novoStatus, logs: listaLogs }).eq("id", id);
+    carregarDados();
+  };
+
+  const deletarItem = async (id) => {
+    if (window.confirm("Excluir registro?")) {
+      await supabase.from("chamados").delete().eq("id", id);
+      carregarDados();
     }
-
-    const novoRegistro = {
-      id: Math.floor(Math.random() * 90000) + 10000,
-      data: new Date().toLocaleString('pt-BR'),
-      ...dados
-    };
-
-    setLista([novoRegistro, ...lista]);
-    setRegistroAtivo(novoRegistro); // Define este como o ativo para o botão de protocolo aparecer
-    setDados({ paciente: '', documento: '', solicitante: '', destino: '' }); // Limpa campos
   };
 
-  // FUNÇÃO DE IMPRESSÃO COM CAMPOS DE ASSINATURA
-  const gerarPDF = (item) => {
-    const win = window.open('', '_blank');
-    win.document.write(`
-      <html>
-        <head>
-          <title>Protocolo - Ninar Prontuários</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-            .header { text-align: center; border-bottom: 2px solid #007bff; margin-bottom: 30px; padding-bottom: 10px; }
-            .content { font-size: 18px; margin-bottom: 50px; }
-            .content p { margin: 15px 0; }
-            .footer-assinaturas { margin-top: 100px; display: flex; justify-content: space-between; }
-            .assinatura-box { text-align: center; width: 45%; }
-            .linha { border-top: 1px solid #000; margin-bottom: 10px; }
-            @media print { .no-print { display: none; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>NINAR PRONTUÁRIOS</h1>
-            <h3>Protocolo de Movimentação #${item.id}</h3>
-          </div>
-          <div class="content">
-            <p><strong>Paciente:</strong> ${item.paciente}</p>
-            <p><strong>Documento/SNC:</strong> ${item.documento}</p>
-            <p><strong>Solicitado por:</strong> ${item.solicitante}</p>
-            <p><strong>Destino:</strong> ${item.destino}</p>
-            <p><strong>Data de Saída:</strong> ${item.data}</p>
-          </div>
-          
-          <div class="footer-assinaturas">
-            <div class="assinatura-box">
-              <div class="linha"></div>
-              <p>Assinatura do Solicitante<br/><small>(Quem recebe o prontuário)</small></p>
-            </div>
-            <div class="assinatura-box">
-              <div class="linha"></div>
-              <p>Responsável Técnico<br/><small>(Setor de Arquivo)</small></p>
-            </div>
-          </div>
-
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
-        </body>
-      </html>
-    `);
-    win.document.close();
-  };
+  const chamadosFiltrados = chamados.filter(c => {
+    const termo = busca.toLowerCase();
+    const dataBR = new Date(c.created_at).toLocaleDateString('pt-BR');
+    return (
+      c.nome?.toLowerCase().includes(termo) || 
+      c.cpf?.includes(termo) || 
+      dataBR.includes(termo) ||
+      c.solicitante?.toLowerCase().includes(termo)
+    );
+  });
 
   return (
-    <div style={styles.container}>
-      <h1 style={{ textAlign: 'center', color: '#2c3e50' }}>Ninar Prontuários</h1>
-      
-      <div style={styles.card}>
-        <input style={styles.input} placeholder="Nome do Paciente" value={dados.paciente} onChange={e => setDados({...dados, paciente: e.target.value})} />
-        <input style={styles.input} placeholder="SNC ou CPF" value={dados.documento} onChange={e => setDados({...dados, documento: e.target.value})} />
-        <input style={styles.input} placeholder="Nome de quem está pedindo" value={dados.solicitante} onChange={e => setDados({...dados, solicitante: e.target.value})} />
-        <input style={styles.input} placeholder="Médico / Destino" value={dados.destino} onChange={e => setDados({...dados, destino: e.target.value})} />
+    <div style={{ background: "#f4f7f6", minHeight: "100vh", padding: "15px", fontFamily: "sans-serif" }}>
+      <div style={{ maxWidth: "550px", margin: "0 auto" }}>
         
-        <button style={styles.btnRegistrar} onClick={registrarMovimentacao}>REGISTRAR MOVIMENTAÇÃO</button>
-        
-        {/* BOTÃO QUE VOLTOU: Só aparece se houver um registro ativo ou se você selecionar um na lista */}
-        {registroAtivo && (
-          <button style={styles.btnProtocolo} onClick={() => gerarPDF(registroAtivo)}>
-            📄 GERAR PROTOCOLO ÚLTIMO REGISTRO
-          </button>
-        )}
-      </div>
+        <h2 style={{ color: "#2c3e50", textAlign: 'center' }}>Ninar Prontuários</h2>
 
-      <div style={{ marginTop: '20px' }}>
-        {lista.map((item) => (
-          <div key={item.id} style={styles.itemLista} onClick={() => setRegistroAtivo(item)}>
-            <div style={{ fontWeight: 'bold', fontSize: '18px' }}>{item.paciente}</div>
-            <div style={{ fontSize: '14px', color: '#666' }}>
-              👤 Solicitado por: <strong>{item.solicitante}</strong><br/>
-              📍 Destino: {item.destino}
-            </div>
-            <button 
-              onClick={(e) => { e.stopPropagation(); gerarPDF(item); }} 
-              style={{ marginTop: '10px', padding: '5px 10px', cursor: 'pointer', borderRadius: '5px', border: '1px solid #28a745', color: '#28a745', background: 'none' }}
-            >
-              Imprimir Protocolo
-            </button>
+        {/* FORMULÁRIO DE LANÇAMENTO */}
+        <div style={s.card}>
+          <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+            <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
+            <button onClick={() => setForm({...form, tipo: "Encaixe"})} style={{...s.tab, backgroundColor: form.tipo === "Encaixe" ? "#dc3545" : "#eee", color: form.tipo === "Encaixe" ? "#fff" : "#666"}}>⚠️ Encaixe</button>
           </div>
-        ))}
+          
+          <input style={s.input} placeholder="Nome do Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
+          <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
+          
+          {/* CAMPO DO NOME DA PESSOA QUE PEDIU - AGORA EM LINHA ÚNICA */}
+          <input 
+            style={{...s.input, border: '2px solid #f39c12'}} 
+            placeholder="👤 Nome de quem está pedindo (Ex: Carlos)" 
+            value={form.solicitante} 
+            onChange={e => setForm({...form, solicitante: e.target.value})} 
+          />
+
+          <input style={s.input} placeholder="Médico / Destino" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
+
+          <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>
+            REGISTRAR MOVIMENTAÇÃO
+          </button>
+        </div>
+
+        {/* BUSCA */}
+        <input 
+          style={{ ...s.input, border: '2px solid #2c3e50' }} 
+          placeholder="🔎 Buscar (Nome, CNS ou Solicitante)..." 
+          value={busca} 
+          onChange={e => setBusca(e.target.value)} 
+        />
+
+        {/* LISTA DE CARDS */}
+        {chamadosFiltrados.filter(c => busca !== "" || c.status !== "Arquivado").map(c => {
+          const st = c.status ? c.status.toLowerCase() : "";
+          return (
+            <div key={c.id} style={{ ...s.itemCard, borderLeft: `6px solid ${st.includes('arquivado') ? '#bdc3c7' : (c.tipo === 'Encaixe' ? '#dc3545' : '#007bff')}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong style={{fontSize: '16px'}}>{c.nome}</strong>
+                <button onClick={() => deletarItem(c.id)} style={{ border: "none", background: "none", color: "#ccc" }}>✕</button>
+              </div>
+              
+              <div style={{ fontSize: "13px", color: "#d35400", fontWeight: 'bold', marginTop: '5px' }}>
+                👤 Solicitado por: {c.solicitante ? c.solicitante.toUpperCase() : "Não informado"}
+              </div>
+              
+              <div style={{ fontSize: "12px", color: "#666" }}>
+                📍 Destino: {c.profissional} | CNS: {c.cpf}
+              </div>
+              
+              <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                {(st.includes('arquivo') || st === "") && (
+                  <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entregue na Recepção", c.logs)}>📦 ENTREGAR</button>
+                )}
+                {st.includes('recepção') && (
+                  <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado", c.logs)}>✔ ARQUIVAR</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+
+const s = {
+  card: { background: "#fff", padding: "15px", borderRadius: "15px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", marginBottom: "20px" },
+  tab: { flex: 1, padding: "10px", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "bold" },
+  input: { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", boxSizing: "border-box", fontSize: "14px" },
+  btnMain: { width: "100%", padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold" },
+  itemCard: { background: "#fff", padding: "15px", borderRadius: "12px", marginBottom: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
+  btnAction: { flex: 1, padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "13px" }
+};
