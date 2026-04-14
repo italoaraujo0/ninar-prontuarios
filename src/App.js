@@ -13,17 +13,39 @@ export default function App() {
   const [form, setForm] = useState({ nome: "", cpf: "", solicitante: "", profissional: "" });
 
   const carregarDados = async () => {
-    const { data } = await supabase.from("chamados").select("*").order("created_at", { ascending: false });
-    setChamados(data || []);
+    try {
+      const { data, error } = await supabase.from("chamados").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      setChamados(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar:", err.message);
+    }
   };
 
   useEffect(() => { carregarDados(); }, []);
 
   const criarChamado = async () => {
     if (!form.nome || !form.cpf) return alert("Preencha Nome e CNS/CPF!");
-    await supabase.from("chamados").insert([{ ...form, status: "Pendente" }]);
-    setForm({ nome: "", cpf: "", solicitante: "", profissional: "" });
-    carregarDados();
+    
+    // Tentativa de salvar
+    const { data, error } = await supabase.from("chamados").insert([
+      { 
+        nome: form.nome, 
+        cpf: form.cpf, 
+        solicitante: form.solicitante, 
+        profissional: form.profissional, 
+        status: "Pendente" 
+      }
+    ]).select();
+
+    if (error) {
+      console.error("Erro ao salvar:", error);
+      alert("Erro ao salvar no banco de dados: " + error.message);
+    } else {
+      setForm({ nome: "", cpf: "", solicitante: "", profissional: "" });
+      carregarDados();
+      alert("Cadastrado com sucesso!");
+    }
   };
 
   const mudarStatus = async (id, novoStatus) => {
@@ -38,7 +60,6 @@ export default function App() {
     }
   };
 
-  // --- FUNCIONALIDADES DE FILTRO ---
   const chamadosFiltrados = chamados.filter(c => {
     if (!dataInicio && !dataFim) return true;
     const dataChamado = new Date(c.created_at);
@@ -47,19 +68,10 @@ export default function App() {
     return true;
   });
 
-  // --- ESTATÍSTICAS (RESUMO) ---
   const estatisticas = {
     total: chamadosFiltrados.length,
     pendentes: chamadosFiltrados.filter(c => c.status === "Pendente").length,
-    atendidos: chamadosFiltrados.filter(c => c.status === "Atendido").length,
     devolvidos: chamadosFiltrados.filter(c => c.status === "Devolvido").length,
-  };
-
-  const gerarRelatorio = () => {
-    const texto = chamadosFiltrados.map(c => 
-      `${c.nome} | CNS: ${c.cpf} | Destino: ${c.profissional} | Status: ${c.status}`
-    ).join("\n");
-    alert("RELATÓRIO DE MOVIMENTAÇÃO:\n\n" + (texto || "Nenhum registro encontrado."));
   };
 
   return (
@@ -70,7 +82,6 @@ export default function App() {
           <p style={styles.subtitle}>Gestão de Movimentação</p>
         </header>
 
-        {/* FORMULÁRIO */}
         <section style={styles.cardForm}>
           <div style={styles.grid}>
             <input style={styles.input} value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} placeholder="Nome do Paciente" />
@@ -78,16 +89,10 @@ export default function App() {
             <input style={styles.input} value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} placeholder="Solicitante" />
             <input style={styles.input} value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} placeholder="Profissional Destino" />
           </div>
-          <button style={styles.btnMain} onClick={criarChamado}>Cadastrar Chamado</button>
+          <button style={styles.btnMain} onClick={criarChamado}>Cadastrar Movimentação</button>
         </section>
 
-        {/* FILTROS E RESUMO */}
         <div style={styles.filtrosArea}>
-          <div style={styles.datas}>
-            <input type="date" style={styles.inputDate} value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
-            <input type="date" style={styles.inputDate} value={dataFim} onChange={e => setDataFim(e.target.value)} />
-            <button style={styles.btnRelatorio} onClick={gerarRelatorio}>📄 Relatório</button>
-          </div>
           <div style={styles.resumo}>
             <span>Total: <b>{estatisticas.total}</b></span>
             <span>Pendentes: <b style={{color: '#ff4d4f'}}>{estatisticas.pendentes}</b></span>
@@ -95,18 +100,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* LISTA DE CARDS */}
         <div style={styles.listGrid}>
           {chamadosFiltrados.map(c => (
             <div key={c.id} style={{...styles.itemCard, borderTop: `5px solid ${c.status === 'Pendente' ? '#ff4d4f' : '#2ecc71'}`}}>
               <div style={styles.cardHeader}>
-                <span style={styles.patientName}>{c.nome}</span>
+                <strong>{c.nome}</strong>
                 <button onClick={() => deletarItem(c.id, c.nome)} style={styles.btnDelete}>✕</button>
               </div>
               <p style={styles.info}><b>CNS:</b> {c.cpf}</p>
-              <p style={styles.info}><b>Para:</b> {c.profissional}</p>
+              <p style={styles.info}><b>Destino:</b> {c.profissional}</p>
               <p style={styles.info}><b>Status:</b> {c.status}</p>
-              
               <div style={styles.actions}>
                 {c.status === "Pendente" ? (
                   <button style={styles.btnDeliver} onClick={() => mudarStatus(c.id, "Atendido")}>📦 Entregar</button>
@@ -132,18 +135,14 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' },
   input: { padding: '12px', borderRadius: '8px', border: '1px solid #ddd' },
   btnMain: { width: '100%', marginTop: '15px', padding: '15px', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  filtrosArea: { backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' },
-  datas: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
-  inputDate: { padding: '8px', borderRadius: '6px', border: '1px solid #ddd' },
-  btnRelatorio: { padding: '8px 15px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-  resumo: { display: 'flex', gap: '20px', fontSize: '0.9rem', borderTop: '1px solid #eee', paddingTop: '10px' },
+  filtrosArea: { backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '20px' },
+  resumo: { display: 'flex', gap: '20px', fontSize: '0.9rem' },
   listGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' },
   itemCard: { backgroundColor: '#fff', padding: '15px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' },
-  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
-  patientName: { fontWeight: 'bold', fontSize: '1.1rem' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between' },
   btnDelete: { background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' },
-  info: { fontSize: '0.85rem', margin: '5px 0', color: '#444' },
-  actions: { marginTop: '15px', display: 'flex', gap: '10px' },
-  btnDeliver: { flex: 1, padding: '10px', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' },
-  btnReturn: { flex: 1, padding: '10px', backgroundColor: '#2ecc71', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }
+  info: { fontSize: '0.85rem', margin: '5px 0' },
+  actions: { marginTop: '10px', display: 'flex', gap: '10px' },
+  btnDeliver: { flex: 1, padding: '10px', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
+  btnReturn: { flex: 1, padding: '10px', backgroundColor: '#2ecc71', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }
 };
