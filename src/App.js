@@ -9,7 +9,6 @@ const supabase = createClient(
 export default function App() {
   const [chamados, setChamados] = useState([]);
   const [busca, setBusca] = useState("");
-  const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [form, setForm] = useState({ nome: "", cpf: "", solicitante: "", profissional: "", tipo: "Agenda" });
 
   const carregarDados = async () => {
@@ -41,16 +40,68 @@ export default function App() {
   };
 
   const deletarItem = async (id) => {
-    if (window.confirm("Remover este registro?")) {
+    if (window.confirm("Remover este registro permanentemente?")) {
       await supabase.from("chamados").delete().eq("id", id);
       carregarDados();
     }
   };
 
-  // Filtro para a tela principal (Geralmente o que não foi arquivado ainda ou busca recente)
+  // BUSCA GLOBAL (Filtra por nome ou CNS em todos os registros)
   const chamadosFiltrados = chamados.filter(c => 
-    (c.nome.toLowerCase().includes(busca.toLowerCase()) || c.cpf.includes(busca))
+    c.nome.toLowerCase().includes(busca.toLowerCase()) || c.cpf.includes(busca)
   );
+
+  // PROTOCOLO DE RASTREIO PARA IMPRESSÃO
+  const imprimirProtocolo = () => {
+    const janelaImpressao = window.open('', '', 'width=900,height=700');
+    janelaImpressao.document.write(`
+      <html>
+        <head>
+          <title>Protocolo de Rastreio - NINAR</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            th, td { border: 1px solid #999; padding: 8px; text-align: left; font-size: 11px; }
+            th { background: #f2f2f2; }
+            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .log-cell { font-size: 9px; color: #666; white-space: pre-line; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2>NINAR - PROTOCOLO DE RASTREIO COMPLETO</h2>
+            <p>Gerado em: ${agora()}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Paciente / CNS-CPF</th>
+                <th>Médico/Destino</th>
+                <th>Status Atual</th>
+                <th>Histórico Completo (Logs)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${chamadosFiltrados.map(c => `
+                <tr>
+                  <td><b>${c.nome.toUpperCase()}</b><br>${c.cpf}</td>
+                  <td>${c.profissional.toUpperCase()}</td>
+                  <td><b>${c.status.toUpperCase()}</b></td>
+                  <td class="log-cell">${c.logs ? c.logs.join('\n') : ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top: 40px; display: flex; justify-content: space-around;">
+             <div style="border-top: 1px solid #000; width: 250px; text-align: center; padding-top: 5px; font-size: 11px;">Arquivo (Saída)</div>
+             <div style="border-top: 1px solid #000; width: 250px; text-align: center; padding-top: 5px; font-size: 11px;">Recepção (Recebido)</div>
+          </div>
+        </body>
+      </html>
+    `);
+    janelaImpressao.document.close();
+    janelaImpressao.print();
+  };
 
   return (
     <div style={{ background: "#f4f7f6", minHeight: "100vh", padding: "15px", fontFamily: "sans-serif" }}>
@@ -58,57 +109,51 @@ export default function App() {
         
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h2 style={{ color: "#2c3e50", margin: 0 }}>Ninar Prontuários</h2>
-          <div style={{display: 'flex', gap: '5px'}}>
-             <button onClick={() => setMostrarHistorico(!mostrarHistorico)} style={s.btnHist}>🔍 {mostrarHistorico ? "Fechar" : "Histórico"}</button>
-          </div>
+          <button onClick={imprimirProtocolo} style={s.btnPrint}>📋 Protocolo</button>
         </header>
 
-        {/* ÁREA DE LANÇAMENTO (Só aparece se não estiver no modo histórico) */}
-        {!mostrarHistorico && (
-          <div style={s.card}>
-            <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-              <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
-              <button onClick={() => setForm({...form, tipo: "Encaixe"})} style={{...s.tab, backgroundColor: form.tipo === "Encaixe" ? "#dc3545" : "#eee", color: form.tipo === "Encaixe" ? "#fff" : "#666"}}>⚠️ Encaixe</button>
-            </div>
-            <input style={s.input} placeholder="Nome do Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
-            <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input style={{...s.input, flex: 1}} placeholder="Setor" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
-              <input style={{...s.input, flex: 1}} placeholder="Médico" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
-            </div>
-            <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>
-               Lançar Prontuário
-            </button>
+        {/* CADASTRO */}
+        <div style={s.card}>
+          <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+            <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
+            <button onClick={() => setForm({...form, tipo: "Encaixe"})} style={{...s.tab, backgroundColor: form.tipo === "Encaixe" ? "#dc3545" : "#eee", color: form.tipo === "Encaixe" ? "#fff" : "#666"}}>⚠️ Encaixe</button>
           </div>
-        )}
+          <input style={s.input} placeholder="Nome do Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
+          <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input style={{...s.input, flex: 1}} placeholder="Setor Solicitante" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
+            <input style={{...s.input, flex: 1}} placeholder="Médico Destino" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
+          </div>
+          <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>
+            {form.tipo === "Agenda" ? "Lançar na Agenda" : "Registrar Encaixe Urgente"}
+          </button>
+        </div>
 
-        {/* BARRA DE BUSCA GLOBAL */}
+        {/* BUSCA GERAL */}
         <div style={{ marginBottom: '15px' }}>
           <input 
             style={{ ...s.input, border: '2px solid #2c3e50', marginBottom: 0 }} 
-            placeholder="🔎 Buscar em TODO o histórico..." 
+            placeholder="🔎 Buscar em todo o histórico (Nome ou CNS)..." 
             value={busca} 
             onChange={e => setBusca(e.target.value)} 
           />
         </div>
 
-        <h4 style={{ color: "#7f8c8d" }}>{mostrarHistorico ? "📜 Todo o Caminho Percorrido" : "🚀 Fluxo Ativo"}</h4>
+        <h4 style={{ color: "#7f8c8d" }}>Movimentações do Dia ({chamadosFiltrados.length})</h4>
         
         {chamadosFiltrados.map(c => (
-          <div key={c.id} style={{ ...s.itemCard, borderLeft: `6px solid ${c.status.includes('Arquivado') ? '#bdc3c7' : (c.tipo === 'Encaixe' ? '#dc3545' : '#007bff')}` }}>
+          <div key={c.id} style={{ ...s.itemCard, borderLeft: `6px solid ${c.status === 'Arquivado' ? '#bdc3c7' : (c.tipo === 'Encaixe' ? '#dc3545' : '#007bff')}` }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <strong style={{fontSize: '16px'}}>{c.nome}</strong>
               <button onClick={() => deletarItem(c.id)} style={{ border: "none", background: "none", color: "#ccc" }}>✕</button>
             </div>
-            <div style={{ fontSize: "12px", color: "#666" }}>CNS: {c.cpf} | Médico: {c.profissional}</div>
+            <div style={{ fontSize: "12px", color: "#666" }}><b>CNS:</b> {c.cpf} | <b>Destino:</b> {c.profissional}</div>
             
-            {/* LINHA DO TEMPO / RASTREIO */}
+            {/* RASTREIO VISÍVEL NO CARD */}
             <div style={s.logBox}>
-              <div style={{fontSize: '10px', fontWeight: 'bold', color: '#2c3e50', marginBottom: '5px'}}>CAMINHO PERCORRIDO:</div>
+              <div style={{fontSize: '10px', fontWeight: 'bold', color: '#2c3e50', marginBottom: '3px'}}>RASTREIO DE PASSAGEM:</div>
               {c.logs && c.logs.map((l, i) => (
-                <div key={i} style={{fontSize: '10px', color: '#555', padding: '2px 0', borderBottom: '1px solid #eee'}}>
-                  {l}
-                </div>
+                <div key={i} style={{fontSize: '10px', color: '#555', borderBottom: '1px solid #f1f1f1', padding: '2px 0'}}>{l}</div>
               ))}
             </div>
 
@@ -117,7 +162,7 @@ export default function App() {
                 <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entregue na Recepção", c.logs)}>📦 ENTREGAR</button>
               )}
               {c.status === "Entregue na Recepção" && (
-                <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado no Arquivo Central", c.logs)}>✔ RECEBER / ARQUIVAR</button>
+                <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado", c.logs)}>✔ RECEBER / ARQUIVAR</button>
               )}
             </div>
           </div>
@@ -132,8 +177,8 @@ const s = {
   tab: { flex: 1, padding: "8px", border: "none", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" },
   input: { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #dfe6e9", boxSizing: "border-box", fontSize: "14px", outline: 'none' },
   btnMain: { width: "100%", padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" },
-  btnHist: { padding: '8px 12px', background: '#2c3e50', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' },
+  btnPrint: { padding: '8px 12px', background: '#34495e', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' },
   itemCard: { background: "#fff", padding: "15px", borderRadius: "12px", marginBottom: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
-  btnAction: { flex: 1, padding: "10px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: "pointer" },
-  logBox: { background: "#f8f9fa", padding: "10px", borderRadius: "8px", marginTop: "10px", border: "1px solid #eee" }
+  btnAction: { flex: 1, padding: "12px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer" },
+  logBox: { background: "#f8f9fa", padding: "10px", borderRadius: "8px", marginTop: "10px", border: "1px solid #edf2f7" }
 };
