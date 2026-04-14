@@ -46,17 +46,13 @@ export default function App() {
     }
   };
 
-  // --- LÓGICA DE BUSCA MELHORADA ---
   const chamadosFiltrados = chamados.filter(c => {
     const termo = busca.toLowerCase();
-    
-    // Converte a data do banco (ISO) para o formato brasileiro para a busca funcionar
     const dataBR = new Date(c.created_at).toLocaleDateString('pt-BR');
-    
     const matchBusca = 
       c.nome?.toLowerCase().includes(termo) || 
       c.cpf?.includes(termo) || 
-      dataBR.includes(termo); // AGORA ACEITA "14/04"
+      dataBR.includes(termo);
 
     if (busca.length > 0) return matchBusca;
     return c.status !== "Arquivado";
@@ -67,7 +63,7 @@ export default function App() {
     janelaImpressao.document.write(`
       <html>
         <head>
-          <title>Protocolo Geral - NINAR</title>
+          <title>Protocolo - NINAR</title>
           <style>
             body { font-family: sans-serif; padding: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -79,25 +75,25 @@ export default function App() {
         </head>
         <body>
           <div class="header">
-            <h2>NINAR - PROTOCOLO DE RASTREIO COMPLETO</h2>
-            <p>Relatório extraído em: ${agora()}</p>
+            <h2>NINAR - PROTOCOLO DE RASTREIO</h2>
+            <p>Gerado em: ${agora()}</p>
           </div>
           <table>
             <thead>
               <tr>
                 <th>Paciente / CNS-CPF</th>
-                <th>Médico/Destino</th>
+                <th>Médico e Solicitante</th>
                 <th>Status Atual</th>
-                <th>Rastreio (Caminho)</th>
+                <th>Rastreio</th>
               </tr>
             </thead>
             <tbody>
               ${chamadosFiltrados.map(c => `
                 <tr>
                   <td><b>${c.nome ? c.nome.toUpperCase() : '---'}</b><br>${c.cpf || '---'}</td>
-                  <td>${c.profissional ? c.profissional.toUpperCase() : '---'}</td>
-                  <td>${c.status || '---'}</td>
-                  <td class="log-cell">${c.logs ? c.logs.join('\n') : 'Sem logs'}</td>
+                  <td>MED: ${c.profissional}<br>SOLIC: ${c.solicitante}</td>
+                  <td>${c.status}</td>
+                  <td class="log-cell">${c.logs ? c.logs.join('\n') : '---'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -118,13 +114,14 @@ export default function App() {
           <button onClick={imprimirProtocoloGlobal} style={s.btnPrint}>📋 Protocolo</button>
         </div>
 
+        {/* CADASTRO */}
         <div style={s.card}>
           <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
             <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
             <button onClick={() => setForm({...form, tipo: "Encaixe"})} style={{...s.tab, backgroundColor: form.tipo === "Encaixe" ? "#dc3545" : "#eee", color: form.tipo === "Encaixe" ? "#fff" : "#666"}}>⚠️ Encaixe</button>
           </div>
           <input style={s.input} placeholder="Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
-          <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
+          <input style={s.input} placeholder="SNC ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
           <div style={{ display: "flex", gap: "8px" }}>
             <input style={{...s.input, flex: 1}} placeholder="Setor" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
             <input style={{...s.input, flex: 1}} placeholder="Médico" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
@@ -132,10 +129,11 @@ export default function App() {
           <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>Registrar Movimentação</button>
         </div>
 
+        {/* BUSCA */}
         <div style={{ marginBottom: '15px' }}>
           <input 
             style={{ ...s.input, border: '2px solid #007bff', marginBottom: 0 }} 
-            placeholder="🔎 Buscar por Nome, CNS ou Data (Ex: 14/04)..." 
+            placeholder="🔎 Buscar por Nome, CNS ou Data..." 
             value={busca} 
             onChange={e => setBusca(e.target.value)} 
           />
@@ -148,18 +146,23 @@ export default function App() {
           return (
             <div key={c.id} style={{ ...s.itemCard, borderLeft: `6px solid ${st.includes('arquivado') ? '#bdc3c7' : (c.tipo === 'Encaixe' ? '#dc3545' : '#007bff')}` }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>{c.nome}</strong>
+                <strong style={{fontSize: '16px'}}>{c.nome}</strong>
                 <button onClick={() => deletarItem(c.id)} style={{ border: "none", background: "none", color: "#ccc", cursor: "pointer" }}>✕</button>
               </div>
-              <div style={{ fontSize: "12px", color: "#666" }}>CNS: {c.cpf} | Médico: {c.profissional}</div>
               
-              <div style={{ background: '#f8f9fa', padding: '8px', borderRadius: '8px', marginTop: '8px', fontSize: '10px', color: '#777' }}>
+              {/* LINHA DO MÉDICO E DO SETOR (SOLICITANTE) - AGORA VISÍVEL */}
+              <div style={{ fontSize: "12px", color: "#666", marginTop: '5px' }}>
+                <b>Médico:</b> {c.profissional} | <b>Solicitado por:</b> {c.solicitante}
+              </div>
+              <div style={{ fontSize: "12px", color: "#666" }}>CNS: {c.cpf}</div>
+              
+              <div style={{ background: '#f8f9fa', padding: '10px', borderRadius: '8px', marginTop: '10px', fontSize: '10px', color: '#555' }}>
                 {c.logs && c.logs.map((l, i) => <div key={i}>{l}</div>)}
               </div>
 
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
                 {(st.includes('arquivo') || st === "" || st.includes('pendente')) && st !== 'arquivado' && (
-                  <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entregue na Recepção", c.logs)}>📦 ENTREGAR</button>
+                  <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entrada na Recepção", c.logs)}>📦 ENTREGAR</button>
                 )}
                 {st.includes('recepção') && (
                   <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado", c.logs)}>✔ ARQUIVAR</button>
@@ -180,5 +183,5 @@ const s = {
   btnMain: { width: "100%", padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" },
   btnPrint: { padding: '8px 12px', background: '#34495e', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' },
   itemCard: { background: "#fff", padding: "15px", borderRadius: "12px", marginBottom: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
-  btnAction: { flex: 1, padding: "12px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer" }
+  btnAction: { flex: 1, padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }
 };
