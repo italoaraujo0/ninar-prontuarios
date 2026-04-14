@@ -46,26 +46,28 @@ export default function App() {
     }
   };
 
-  // --- LÓGICA DE BUSCA GLOBAL ---
+  // --- LÓGICA DE BUSCA MELHORADA ---
   const chamadosFiltrados = chamados.filter(c => {
     const termo = busca.toLowerCase();
-    const matchFiltro = 
+    
+    // Converte a data do banco (ISO) para o formato brasileiro para a busca funcionar
+    const dataBR = new Date(c.created_at).toLocaleDateString('pt-BR');
+    
+    const matchBusca = 
       c.nome?.toLowerCase().includes(termo) || 
       c.cpf?.includes(termo) || 
-      c.profissional?.toLowerCase().includes(termo) ||
-      c.created_at?.includes(termo); // Permite buscar por data (Ex: 2026-04-14)
+      dataBR.includes(termo); // AGORA ACEITA "14/04"
 
-    // Se estiver buscando, mostra TUDO (inclusive arquivados). Se não, mostra só o fluxo ativo.
-    if (busca.length > 0) return matchFiltro;
+    if (busca.length > 0) return matchBusca;
     return c.status !== "Arquivado";
   });
 
-  const imprimirProtocolo = () => {
+  const imprimirProtocoloGlobal = () => {
     const janelaImpressao = window.open('', '', 'width=900,height=700');
     janelaImpressao.document.write(`
       <html>
         <head>
-          <title>Protocolo de Rastreio - NINAR</title>
+          <title>Protocolo Geral - NINAR</title>
           <style>
             body { font-family: sans-serif; padding: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -86,16 +88,16 @@ export default function App() {
                 <th>Paciente / CNS-CPF</th>
                 <th>Médico/Destino</th>
                 <th>Status Atual</th>
-                <th>Rastreio (Caminho Percorrido)</th>
+                <th>Rastreio (Caminho)</th>
               </tr>
             </thead>
             <tbody>
               ${chamadosFiltrados.map(c => `
                 <tr>
-                  <td><b>${c.nome.toUpperCase()}</b><br>${c.cpf}</td>
-                  <td>${c.profissional.toUpperCase()}</td>
-                  <td>${c.status}</td>
-                  <td class="log-cell">${c.logs ? c.logs.join('\n') : 'Sem registros'}</td>
+                  <td><b>${c.nome ? c.nome.toUpperCase() : '---'}</b><br>${c.cpf || '---'}</td>
+                  <td>${c.profissional ? c.profissional.toUpperCase() : '---'}</td>
+                  <td>${c.status || '---'}</td>
+                  <td class="log-cell">${c.logs ? c.logs.join('\n') : 'Sem logs'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -113,16 +115,15 @@ export default function App() {
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h2 style={{ color: "#2c3e50", margin: 0 }}>Ninar Prontuários</h2>
-          <button onClick={imprimirProtocolo} style={s.btnPrint}>📋 Protocolo</button>
+          <button onClick={imprimirProtocoloGlobal} style={s.btnPrint}>📋 Protocolo</button>
         </div>
 
-        {/* CADASTRO */}
         <div style={s.card}>
           <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
             <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
             <button onClick={() => setForm({...form, tipo: "Encaixe"})} style={{...s.tab, backgroundColor: form.tipo === "Encaixe" ? "#dc3545" : "#eee", color: form.tipo === "Encaixe" ? "#fff" : "#666"}}>⚠️ Encaixe</button>
           </div>
-          <input style={s.input} placeholder="Nome do Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
+          <input style={s.input} placeholder="Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
           <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
           <div style={{ display: "flex", gap: "8px" }}>
             <input style={{...s.input, flex: 1}} placeholder="Setor" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
@@ -131,33 +132,29 @@ export default function App() {
           <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>Registrar Movimentação</button>
         </div>
 
-        {/* BUSCA GLOBAL */}
         <div style={{ marginBottom: '15px' }}>
           <input 
-            style={{ ...s.input, border: '2px solid #2c3e50', marginBottom: 0 }} 
-            placeholder="🔎 Buscar em TODO o histórico (Nome, CNS ou Data)..." 
+            style={{ ...s.input, border: '2px solid #007bff', marginBottom: 0 }} 
+            placeholder="🔎 Buscar por Nome, CNS ou Data (Ex: 14/04)..." 
             value={busca} 
             onChange={e => setBusca(e.target.value)} 
           />
         </div>
 
-        <h4 style={{ color: "#7f8c8d", marginBottom: '10px' }}>
-          {busca ? "Resultados da Busca Global" : "Fluxo Ativo de Hoje"} ({chamadosFiltrados.length})
-        </h4>
+        <h4 style={{ color: "#7f8c8d", marginBottom: '10px' }}>Resultados ({chamadosFiltrados.length})</h4>
         
         {chamadosFiltrados.map(c => {
           const st = c.status ? c.status.toLowerCase() : "";
           return (
             <div key={c.id} style={{ ...s.itemCard, borderLeft: `6px solid ${st.includes('arquivado') ? '#bdc3c7' : (c.tipo === 'Encaixe' ? '#dc3545' : '#007bff')}` }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong style={{fontSize: '16px'}}>{c.nome}</strong>
+                <strong>{c.nome}</strong>
                 <button onClick={() => deletarItem(c.id)} style={{ border: "none", background: "none", color: "#ccc", cursor: "pointer" }}>✕</button>
               </div>
-              <div style={{ fontSize: "12px", color: "#666" }}><b>CNS:</b> {c.cpf} | <b>Médico:</b> {c.profissional}</div>
+              <div style={{ fontSize: "12px", color: "#666" }}>CNS: {c.cpf} | Médico: {c.profissional}</div>
               
-              {/* RASTREIO VISÍVEL */}
-              <div style={s.logBox}>
-                {c.logs && c.logs.map((l, i) => <div key={i} style={{fontSize: '10px', color: '#777'}}>{l}</div>)}
+              <div style={{ background: '#f8f9fa', padding: '8px', borderRadius: '8px', marginTop: '8px', fontSize: '10px', color: '#777' }}>
+                {c.logs && c.logs.map((l, i) => <div key={i}>{l}</div>)}
               </div>
 
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
@@ -165,7 +162,7 @@ export default function App() {
                   <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entregue na Recepção", c.logs)}>📦 ENTREGAR</button>
                 )}
                 {st.includes('recepção') && (
-                  <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado", c.logs)}>✔ VOLTOU / ARQUIVAR</button>
+                  <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado", c.logs)}>✔ ARQUIVAR</button>
                 )}
               </div>
             </div>
@@ -183,6 +180,5 @@ const s = {
   btnMain: { width: "100%", padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" },
   btnPrint: { padding: '8px 12px', background: '#34495e', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' },
   itemCard: { background: "#fff", padding: "15px", borderRadius: "12px", marginBottom: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
-  btnAction: { flex: 1, padding: "12px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer" },
-  logBox: { background: "#f8f9fa", padding: "8px", borderRadius: "8px", marginTop: "8px", border: "1px solid #eee" }
+  btnAction: { flex: 1, padding: "12px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer" }
 };
