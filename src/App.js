@@ -25,8 +25,8 @@ export default function App() {
   const agora = () => new Date().toLocaleString('pt-BR');
 
   const salvarChamado = async () => {
-    if (!form.nome || !form.cpf || !form.solicitante) return alert("Preencha Nome, CNS e Quem está pedindo!");
-    const logInicial = [`${agora()} - [${form.tipo}] Prontuário separado no Arquivo`];
+    if (!form.nome || !form.cpf || !form.solicitante) return alert("Preencha Nome, CNS e Solicitante!");
+    const logInicial = [`${agora()} - [${form.tipo}] Separado no Arquivo`];
     await supabase.from("chamados").insert([{ ...form, status: "No Arquivo (Separado)", logs: logInicial }]);
     setForm({ nome: "", cpf: "", solicitante: "", profissional: "", tipo: "Agenda" });
     carregarDados();
@@ -57,13 +57,76 @@ export default function App() {
     );
   });
 
+  // --- PROTOCOLO COM ÁREA DE ASSINATURA ---
+  const imprimirProtocolo = () => {
+    const janelaImpressao = window.open('', '', 'width=900,height=700');
+    janelaImpressao.document.write(`
+      <html>
+        <head>
+          <title>Protocolo de Entrega - NINAR</title>
+          <style>
+            body { font-family: sans-serif; padding: 30px; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 10px; text-align: left; font-size: 11px; }
+            th { background: #f2f2f2; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+            .footer-assinaturas { margin-top: 60px; display: flex; justify-content: space-between; }
+            .box-assinatura { border-top: 1px solid #000; width: 40%; text-align: center; padding-top: 8px; font-size: 12px; font-weight: bold; }
+            .log-cell { font-size: 9px; color: #666; white-space: pre-line; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 style="margin:0">INSTITUTO ACQUA - NINAR</h1>
+            <h2 style="margin:5px 0">PROTOCOLO DE MOVIMENTAÇÃO DE PRONTUÁRIOS</h2>
+            <p>Data de Emissão: ${agora()}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Paciente / CNS</th>
+                <th>Solicitante / Médico</th>
+                <th>Status Atual</th>
+                <th>Rastreio (Logs)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${chamadosFiltrados.map(c => `
+                <tr>
+                  <td><b>${c.nome.toUpperCase()}</b><br>${c.cpf}</td>
+                  <td>SOLIC: ${c.solicitante.toUpperCase()}<br>MED: ${c.profissional}</td>
+                  <td>${c.status}</td>
+                  <td class="log-cell">${c.logs ? c.logs.join('\n') : ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="footer-assinaturas">
+            <div class="box-assinatura">ARQUIVO (SAÍDA)<br/><small>Ítalo Cássio</small></div>
+            <div class="box-assinatura">RECEPÇÃO (RECEBIDO)<br/><small>Assinatura / Carimbo</small></div>
+          </div>
+
+          <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #999;">
+            Documento gerado eletronicamente para fins de controle de custódia.
+          </div>
+        </body>
+      </html>
+    `);
+    janelaImpressao.document.close();
+    janelaImpressao.print();
+  };
+
   return (
     <div style={{ background: "#f4f7f6", minHeight: "100vh", padding: "15px", fontFamily: "sans-serif" }}>
       <div style={{ maxWidth: "550px", margin: "0 auto" }}>
         
-        <h2 style={{ color: "#2c3e50", textAlign: 'center' }}>Ninar Prontuários</h2>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h2 style={{ color: "#2c3e50", margin: 0 }}>Ninar Prontuários</h2>
+          <button onClick={imprimirProtocolo} style={s.btnPrint}>📋 Protocolo</button>
+        </header>
 
-        {/* FORMULÁRIO DE LANÇAMENTO */}
+        {/* CADASTRO */}
         <div style={s.card}>
           <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
             <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
@@ -73,7 +136,7 @@ export default function App() {
           <input style={s.input} placeholder="Nome do Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
           <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
           
-          {/* CAMPO DO NOME DA PESSOA QUE PEDIU - AGORA EM LINHA ÚNICA */}
+          {/* CAMPO SOLICITANTE */}
           <input 
             style={{...s.input, border: '2px solid #f39c12'}} 
             placeholder="👤 Nome de quem está pedindo (Ex: Carlos)" 
@@ -96,7 +159,7 @@ export default function App() {
           onChange={e => setBusca(e.target.value)} 
         />
 
-        {/* LISTA DE CARDS */}
+        {/* LISTA */}
         {chamadosFiltrados.filter(c => busca !== "" || c.status !== "Arquivado").map(c => {
           const st = c.status ? c.status.toLowerCase() : "";
           return (
@@ -110,13 +173,13 @@ export default function App() {
                 👤 Solicitado por: {c.solicitante ? c.solicitante.toUpperCase() : "Não informado"}
               </div>
               
-              <div style={{ fontSize: "12px", color: "#666" }}>
+              <div style={{ fontSize: "12px", color: "#666", marginTop: '3px' }}>
                 📍 Destino: {c.profissional} | CNS: {c.cpf}
               </div>
               
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-                {(st.includes('arquivo') || st === "") && (
-                  <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entregue na Recepção", c.logs)}>📦 ENTREGAR</button>
+                {(st.includes('arquivo') || st === "" || st.includes('pendente')) && st !== 'arquivado' && (
+                  <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entrada na Recepção", c.logs)}>📦 ENTREGAR</button>
                 )}
                 {st.includes('recepção') && (
                   <button style={{...s.btnAction, background: "#2ecc71"}} onClick={() => atualizarStatus(c.id, "Arquivado", c.logs)}>✔ ARQUIVAR</button>
@@ -135,6 +198,7 @@ const s = {
   tab: { flex: 1, padding: "10px", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "bold" },
   input: { width: "100%", padding: "12px", marginBottom: "10px", borderRadius: "8px", border: "1px solid #ddd", boxSizing: "border-box", fontSize: "14px" },
   btnMain: { width: "100%", padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold" },
+  btnPrint: { padding: '10px 15px', background: '#34495e', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' },
   itemCard: { background: "#fff", padding: "15px", borderRadius: "12px", marginBottom: "15px", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
   btnAction: { flex: 1, padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "13px" }
 };
