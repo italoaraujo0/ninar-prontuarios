@@ -26,7 +26,7 @@ export default function App() {
 
   const salvarChamado = async () => {
     if (!form.nome || !form.cpf || !form.solicitante) return alert("Preencha Nome, CNS e Solicitante!");
-    const logInicial = [`${agora()} - [${form.tipo}] Separado no Arquivo`];
+    const logInicial = [`${agora()} - [${form.tipo}] Prontuário separado no Arquivo`];
     await supabase.from("chamados").insert([{ ...form, status: "No Arquivo (Separado)", logs: logInicial }]);
     setForm({ nome: "", cpf: "", solicitante: "", profissional: "", tipo: "Agenda" });
     carregarDados();
@@ -57,7 +57,6 @@ export default function App() {
     );
   });
 
-  // --- PROTOCOLO COM ÁREA DE ASSINATURA ---
   const imprimirProtocolo = () => {
     const janelaImpressao = window.open('', '', 'width=900,height=700');
     janelaImpressao.document.write(`
@@ -103,12 +102,8 @@ export default function App() {
           </table>
           
           <div class="footer-assinaturas">
-            <div class="box-assinatura">ARQUIVO (SAÍDA)<br/><small>Ítalo Cássio</small></div>
+            <div class="box-assinatura">ARQUIVO (SAÍDA)<br/><small>Assinatura / Carimbo</small></div>
             <div class="box-assinatura">RECEPÇÃO (RECEBIDO)<br/><small>Assinatura / Carimbo</small></div>
-          </div>
-
-          <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #999;">
-            Documento gerado eletronicamente para fins de controle de custódia.
           </div>
         </body>
       </html>
@@ -118,8 +113,8 @@ export default function App() {
   };
 
   return (
-    <div style={{ background: "#f4f7f6", minHeight: "100vh", padding: "15px", fontFamily: "sans-serif" }}>
-      <div style={{ maxWidth: "550px", margin: "0 auto" }}>
+    <div style={{ background: "#f4f7f6", minHeight: "100vh", padding: "15px", fontFamily: "sans-serif", display: 'flex', flexDirection: 'column' }}>
+      <div style={{ maxWidth: "550px", margin: "0 auto", flex: 1 }}>
         
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h2 style={{ color: "#2c3e50", margin: 0 }}>Ninar Prontuários</h2>
@@ -132,32 +127,15 @@ export default function App() {
             <button onClick={() => setForm({...form, tipo: "Agenda"})} style={{...s.tab, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#eee", color: form.tipo === "Agenda" ? "#fff" : "#666"}}>Agenda</button>
             <button onClick={() => setForm({...form, tipo: "Encaixe"})} style={{...s.tab, backgroundColor: form.tipo === "Encaixe" ? "#dc3545" : "#eee", color: form.tipo === "Encaixe" ? "#fff" : "#666"}}>⚠️ Encaixe</button>
           </div>
-          
           <input style={s.input} placeholder="Nome do Paciente" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
           <input style={s.input} placeholder="CNS ou CPF" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
-          
-          {/* CAMPO SOLICITANTE */}
-          <input 
-            style={{...s.input, border: '2px solid #f39c12'}} 
-            placeholder="👤 Nome de quem está pedindo (Ex: Carlos)" 
-            value={form.solicitante} 
-            onChange={e => setForm({...form, solicitante: e.target.value})} 
-          />
-
+          <input style={{...s.input, border: '2px solid #f39c12'}} placeholder="👤 Nome de quem está pedindo" value={form.solicitante} onChange={e => setForm({...form, solicitante: e.target.value})} />
           <input style={s.input} placeholder="Médico / Destino" value={form.profissional} onChange={e => setForm({...form, profissional: e.target.value})} />
-
-          <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>
-            REGISTRAR MOVIMENTAÇÃO
-          </button>
+          <button style={{...s.btnMain, backgroundColor: form.tipo === "Agenda" ? "#007bff" : "#dc3545"}} onClick={salvarChamado}>REGISTRAR MOVIMENTAÇÃO</button>
         </div>
 
         {/* BUSCA */}
-        <input 
-          style={{ ...s.input, border: '2px solid #2c3e50' }} 
-          placeholder="🔎 Buscar (Nome, CNS ou Solicitante)..." 
-          value={busca} 
-          onChange={e => setBusca(e.target.value)} 
-        />
+        <input style={{ ...s.input, border: '2px solid #2c3e50' }} placeholder="🔎 Buscar..." value={busca} onChange={e => setBusca(e.target.value)} />
 
         {/* LISTA */}
         {chamadosFiltrados.filter(c => busca !== "" || c.status !== "Arquivado").map(c => {
@@ -168,15 +146,8 @@ export default function App() {
                 <strong style={{fontSize: '16px'}}>{c.nome}</strong>
                 <button onClick={() => deletarItem(c.id)} style={{ border: "none", background: "none", color: "#ccc" }}>✕</button>
               </div>
-              
-              <div style={{ fontSize: "13px", color: "#d35400", fontWeight: 'bold', marginTop: '5px' }}>
-                👤 Solicitado por: {c.solicitante ? c.solicitante.toUpperCase() : "Não informado"}
-              </div>
-              
-              <div style={{ fontSize: "12px", color: "#666", marginTop: '3px' }}>
-                📍 Destino: {c.profissional} | CNS: {c.cpf}
-              </div>
-              
+              <div style={{ fontSize: "13px", color: "#d35400", fontWeight: 'bold', marginTop: '5px' }}>👤 Solicitado por: {c.solicitante?.toUpperCase()}</div>
+              <div style={{ fontSize: "12px", color: "#666", marginTop: '3px' }}>📍 Destino: {c.profissional} | CNS: {c.cpf}</div>
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
                 {(st.includes('arquivo') || st === "" || st.includes('pendente')) && st !== 'arquivado' && (
                   <button style={{...s.btnAction, background: "#f39c12"}} onClick={() => atualizarStatus(c.id, "Entrada na Recepção", c.logs)}>📦 ENTREGAR</button>
@@ -189,6 +160,11 @@ export default function App() {
           );
         })}
       </div>
+
+      {/* CRÉDITOS DO DESENVOLVEDOR */}
+      <footer style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#bdc3c7', fontWeight: 'bold', letterSpacing: '1px' }}>
+        DESENVOLVIDO POR ÍTALO ARAÚJO
+      </footer>
     </div>
   );
 }
